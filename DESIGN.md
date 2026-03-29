@@ -148,15 +148,21 @@ Complementam o judge com contagens binárias e percentuais auditáveis:
 **Motivo:** Métricas determinísticas são auditáveis e não dependem de outro LLM call.
 Combinadas com o judge, oferecem duas camadas de evidência independentes.
 
-### Playwright só quando necessário
+### Estratégia de scraping por fonte (revisada em 2026-03-29)
 
-| Fonte  | Estratégia | Motivo                                    |
-|--------|------------|-------------------------------------------|
-| FUNCAP | httpx + BS4| WordPress estático, sem JS                |
-| FAPDF  | Playwright | Accordion expandido por JS                |
-| CAPES  | Playwright | Portal gov.br renderiza conteúdo via JS   |
+| Fonte  | Estratégia   | Motivo                                                          |
+|--------|--------------|-----------------------------------------------------------------|
+| FUNCAP | httpx + BS4  | WordPress estático, sem JS. Seletores: `<ul>/<li>` + `.acesso` |
+| FAPDF  | httpx + BS4  | URL direta `/editais-fapdf-20261`, links PDF já expostos no HTML, sem JS |
+| CAPES  | Firecrawl    | Portal gov.br com JS pesado; Firecrawl retorna markdown + links sem seletores frágeis |
 
-Evitar Playwright desnecessário: mais lento, mais frágil, maior overhead.
+**Decisão original (Playwright no FAPDF/CAPES) foi revisada** após teste com URLs reais:
+- FAPDF não usa accordion — tem URL própria por ano com links diretos para PDFs.
+- CAPES exige visita por-edital para encontrar PDFs; Firecrawl é mais robusto que Playwright para este padrão.
+
+Playwright permanece instalado como dependência (pode ser necessário futuramente), mas não é usado em nenhum scraper ativo.
+
+**Configuração:** `FIRECRAWL_API_KEY` obrigatória no `.env` para o `CAPESScraper`.
 
 ### Configuração centralizada em `config/sources.py`
 

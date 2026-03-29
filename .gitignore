@@ -14,5 +14,4 @@ wheels/
 .env
 output/
 .pytest_cache
-docs/
 CLAUDE.md

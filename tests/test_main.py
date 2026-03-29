@@ -1,10 +1,11 @@
 import json
-import pytest 
+import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Patch
-from datetime import datetime 
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
 from models.edital import Edital
 from models.evaluation import EvaluationResult, FieldScore
+
 
 def _mock_edital(source="fapdf", link="https://fap.df.gov.br/1") -> Edital:
     return Edital.model_validate({
@@ -15,10 +16,11 @@ def _mock_edital(source="fapdf", link="https://fap.df.gov.br/1") -> Edital:
         "extraido_em": datetime.now().isoformat()
     })
 
-def _mocK_evaluation(edital: Edital, score=0.9) -> EvaluationResult:
+
+def _mock_evaluation(edital: Edital, score=0.9) -> EvaluationResult:
     return EvaluationResult(
         edital_id=edital.id,
-        source=edutal.fonte,
+        source=edital.fonte,
         field_scores={"titulo": FieldScore(
             fidelidade=score,
             completude=score,
@@ -32,6 +34,7 @@ def _mocK_evaluation(edital: Edital, score=0.9) -> EvaluationResult:
         text_truncated=False,
         evaluated_at=datetime.now(),
     )
+
 
 async def test_pipeline_saves_json(tmp_path):
     from main import run_pipeline
@@ -62,11 +65,10 @@ async def test_pipeline_saves_json(tmp_path):
         mock_extract.return_value = (edital, [])
         mock_judge.return_value = evaluation
 
-        output_dir = tmp_path
-        await run_pipeline(output_dir=output_dir)
+        await run_pipeline(output_dir=tmp_path)
 
-    editais_file = output_dir / "editais.json"
-    evaluation_file = output_dir / "evaluation.json"
+    editais_file = tmp_path / "editais.json"
+    evaluation_file = tmp_path / "evaluation.json"
     assert editais_file.exists()
     assert evaluation_file.exists()
 
@@ -74,12 +76,13 @@ async def test_pipeline_saves_json(tmp_path):
     assert len(editais) == 1
     assert editais[0]["titulo"] == "Edital Teste"
 
-async def  test_pipeline_continues_after_error(tmp_path):
+
+async def test_pipeline_continues_after_error(tmp_path):
     """Failure in one opportunity shouldn't stop others"""
     from main import run_pipeline
 
     edital = _mock_edital()
-    evaluation = _mocK_evaluation(edital)
+    evaluation = _mock_evaluation(edital)
 
     with (
         patch("main.FUNCAPScraper") as MockFUNCAP,
@@ -101,14 +104,11 @@ async def  test_pipeline_continues_after_error(tmp_path):
         MockCAPES.return_value.get_opportunities = AsyncMock(return_value=[])
         MockCAPES.return_value.get_documents = AsyncMock(return_value=[])
 
-        #
-
         mock_pdf.side_effect = [("texto do pdf", False), Exception("PDF não encontrado")]
         mock_extract.return_value = (edital, [])
         mock_judge.return_value = evaluation
+
         await run_pipeline(output_dir=tmp_path)
 
     editais = json.loads((tmp_path / "editais.json").read_text())
     assert len(editais) == 1
-
-    
