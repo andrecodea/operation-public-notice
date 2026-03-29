@@ -60,3 +60,4 @@ async def test_claude_uses_fallback_model(config):
         assert result == "resposta claude"
 
 # To run: uv run pytest tests/providers/ -v
+# PASSED: 28/03/2026

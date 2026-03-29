@@ -8,15 +8,16 @@ class Edital(BaseModel):
     objetivo: str | None = None
     publico_alvo: list[str] = []
     areas_tematicas: list[str] = []
-    eligibilidade: str | None = None 
-    prazo_submissão: str | None = None
+    elegibilidade: str | None = None 
+    prazo_submissao: str | None = None
     valor_financiamento: str | None = None
     modalidade_fomento: str | None = None
     documentos_exigidos: list[str] = []
     criterios_avaliacao: str | None = None
-    cronograma: list[str] = []
+    cronograma: list[dict] = []
     link_edital: str
     link_pdf_principal: str | None = None
+    links_anexos: list[str] = []
     observacoes: str | None = None
     fonte: str 
     extraido_em: datetime

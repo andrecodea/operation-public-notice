@@ -67,22 +67,22 @@ async def extract_edital(
 
 async def correct_edital(
     messages: list[dict],
-    scores_por_campo: dict[str, FieldScore],
+    field_scores: dict[str, FieldScore],
     config: LLMConfig,
 ) -> Edital:
     """"""
-    correction_prompt = build_correction_prompt(scores_por_campo)
+    correction_prompt = build_correction_prompt(field_scores)
     correction_messages = messages + [{"role": "user", "content": correction_prompt}]
 
     raw = await complete_with_fallback(correction_messages, config)
     data = json.loads(raw)
     return Edital.model_validate(data)
 
-def build_correction_prompt(scores_por_campo: dict[str, FieldScore]) -> str:
+def build_correction_prompt(field_scores: dict[str, FieldScore]) -> str:
     """"""
     low_fields = {
         field: score
-        for field, score in scores_por_campo.items()
+        for field, score in field_scores.items()
         if score.fidelidade is not None
         and score.completude is not None
         and (score.fidelidade + score.completude) / 2 < 0.6

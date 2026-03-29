@@ -16,14 +16,14 @@ def _evaluation_result(**kwargs) -> EvaluationResult:
     """Defines mock evaluation results."""
     defaults = {
         "edital_id": "abc123",
-        "fonte": "fapdf",
-        "scores_por_campo": {"titulo": _field_score()},
-        "score_geral": 1.0,
-        "campos_preenchidos": 8,
-        "campos_nulos": 4,
-        "json_valido": True,
-        "texto_truncado": False,
-        "avaliado_em": datetime.now(),
+        "source": "fapdf",
+        "field_scores": {"titulo": _field_score()},
+        "overall_score": 1.0,
+        "filled_fields": 8,
+        "null_fields": 4,
+        "json_valid": True,
+        "text_truncated": False,
+        "evaluated_at": datetime.now(),
     }
     return EvaluationResult(**{**defaults, **kwargs})
 
@@ -42,20 +42,20 @@ def test_evaluation_result_corrected_default_false():
     """Asserts that the default of EvaluationResult's correction status is False
     and the eval scores are None."""
     result = _evaluation_result()
-    assert result.corrigido is False
-    assert result.score_antes_correcao is None
-    assert result.score_pos_correcao is None
+    assert result.corrected is False
+    assert result.score_before_correction is None
+    assert result.score_after_correction is None
 
 def test_evaluation_result_with_correction():
     """Asserts that corrections are accurately identified by Pydantic."""
     result = _evaluation_result(
-        corrigido=True,
-        score_antes_correcao=0.45,
-        score_pos_correcao=0.72,
-        score_geral=0.72
+        corrected=True,
+        score_before_correction=0.45,
+        score_after_correction=0.72,
+        overall_score=0.72
     )
-    assert result.corrigido is True
-    assert result.score_antes_correcao == 0.45
+    assert result.corrected is True
+    assert result.score_before_correction == 0.45
 
 # To run: uv run pytest tests/models/test_evaluation.py -v
 # To run all: uv run pytest tests/models/ -v

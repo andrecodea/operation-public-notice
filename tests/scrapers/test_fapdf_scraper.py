@@ -9,13 +9,18 @@ def scraper():
 
 async def test_get_opportunity_year_filter(scraper):
     """Playwright mock that returns two items, only one from 2026."""
+
+    # edital mock de 2026
     mock_item_2026 = MagicMock()
     mock_item_2026.inner_text = AsyncMock(return_value="Edital FAPDF 2026")
     mock_item_2026.get_attribute = AsyncMock(return_value="https://fap.df.gov.br/edital/1")
+
+    # edital mock de 2025
     mock_item_2025 = MagicMock()
     mock_item_2025.inner_text = AsyncMock(return_value="Edital FAPDF 2025")
     mock_item_2025.get_attribute = AsyncMock(return_value="https://fap.df.gov.br/edital/2")
 
+    # página web mock
     mock_page = AsyncMock()
     mock_page.query_selector_all = AsyncMock(return_value=[mock_item_2026, mock_item_2025])
     mock_page.click = AsyncMock()
