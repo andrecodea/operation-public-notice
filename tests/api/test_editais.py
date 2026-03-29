@@ -1,8 +1,8 @@
 import pytest
 import httpx
 from httpx import ASGITransport
-from unittest.mock import patch
 from api.main import app
+from api.dependencies import load_editais, load_evaluations
 
 EDITAL_A = {
     "titulo": "Edital A", "orgao": "FAPDF", "fonte": "fapdf",
@@ -33,49 +33,48 @@ async def client():
         yield c
 
 
-async def test_get_editais_returns_list(client):
-    with (
-        patch("api.routes.editais.load_editais", return_value=[EDITAL_A, EDITAL_B]),
-        patch("api.routes.editais.load_evaluations", return_value=[EVAL_A]),
-    ):
-        resp = await client.get("/editais")
+@pytest.fixture
+def mock_data_ab():
+    app.dependency_overrides[load_editais] = lambda: [EDITAL_A, EDITAL_B]
+    app.dependency_overrides[load_evaluations] = lambda: [EVAL_A]
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mock_data_a_only():
+    app.dependency_overrides[load_editais] = lambda: [EDITAL_A]
+    app.dependency_overrides[load_evaluations] = lambda: [EVAL_A]
+    yield
+    app.dependency_overrides.clear()
+
+
+async def test_get_editais_returns_list(client, mock_data_ab):
+    resp = await client.get("/editais")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 2
     assert data[0]["id"] == "abc123"
 
 
-async def test_get_editais_filter_by_fonte(client):
-    with (
-        patch("api.routes.editais.load_editais", return_value=[EDITAL_A, EDITAL_B]),
-        patch("api.routes.editais.load_evaluations", return_value=[EVAL_A]),
-    ):
-        resp = await client.get("/editais?fonte=fapdf")
+async def test_get_editais_filter_by_fonte(client, mock_data_ab):
+    resp = await client.get("/editais?fonte=fapdf")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
     assert data[0]["fonte"] == "fapdf"
 
 
-async def test_get_editais_filter_by_min_score(client):
-    with (
-        patch("api.routes.editais.load_editais", return_value=[EDITAL_A, EDITAL_B]),
-        patch("api.routes.editais.load_evaluations", return_value=[EVAL_A]),
-    ):
-        resp = await client.get("/editais?min_score=0.85")
+async def test_get_editais_filter_by_min_score(client, mock_data_ab):
+    resp = await client.get("/editais?min_score=0.85")
     assert resp.status_code == 200
     data = resp.json()
-    # Only EDITAL_A has score 0.9 >= 0.85; EDITAL_B has no evaluation
     assert len(data) == 1
     assert data[0]["id"] == "abc123"
 
 
-async def test_get_edital_by_id_returns_detail(client):
-    with (
-        patch("api.routes.editais.load_editais", return_value=[EDITAL_A]),
-        patch("api.routes.editais.load_evaluations", return_value=[EVAL_A]),
-    ):
-        resp = await client.get("/editais/abc123")
+async def test_get_edital_by_id_returns_detail(client, mock_data_a_only):
+    resp = await client.get("/editais/abc123")
     assert resp.status_code == 200
     data = resp.json()
     assert data["edital"]["id"] == "abc123"
@@ -83,9 +82,10 @@ async def test_get_edital_by_id_returns_detail(client):
 
 
 async def test_get_edital_by_id_returns_404(client):
-    with (
-        patch("api.routes.editais.load_editais", return_value=[EDITAL_A]),
-        patch("api.routes.editais.load_evaluations", return_value=[]),
-    ):
+    app.dependency_overrides[load_editais] = lambda: [EDITAL_A]
+    app.dependency_overrides[load_evaluations] = lambda: []
+    try:
         resp = await client.get("/editais/nonexistent")
+    finally:
+        app.dependency_overrides.clear()
     assert resp.status_code == 404
