@@ -1,24 +1,24 @@
 import logging
 import os
-from firecrawl import FirecrawlApp
+from firecrawl import AsyncFirecrawlApp
 from scrapers.base_scraper import BaseScraper
 
 logger = logging.getLogger(__name__)
 
 CAPES_BASE = "https://www.gov.br/capes"
-SKIP_PATHS = ["/pt-br/assuntos/editais", "/acesso-a-informacao/institucional"]
+SKIP_PATHS = ["/resultados-", "/resultados-anteriores"]
 
 
 class CAPESScraper(BaseScraper):
     @property
-    def fc(self) -> FirecrawlApp:
+    def fc(self) -> AsyncFirecrawlApp:
         if not hasattr(self, "_fc_client"):
-            self._fc_client = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
+            self._fc_client = AsyncFirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
         return self._fc_client
 
     async def get_opportunities(self) -> list[dict]:
         await self._delay()
-        result = self.fc.scrape_url(self.url, params={"formats": ["links"]})
+        result = await self.fc.scrape(self.url, formats=["links"])
         links = result.links or []
 
         opportunities = []
@@ -43,7 +43,7 @@ class CAPESScraper(BaseScraper):
             return [url]
 
         await self._delay()
-        result = self.fc.scrape_url(url, params={"formats": ["links"]})
+        result = await self.fc.scrape(url, formats=["links"])
         links = result.links or []
 
         pdfs = [link for link in links if link.lower().endswith(".pdf")]

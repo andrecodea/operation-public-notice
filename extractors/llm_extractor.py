@@ -9,6 +9,14 @@ from providers.base import complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
+
+def _strip_markdown(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
+
 SYSTEM_PROMPT = """
 Você é um extrator especializado em editais de fomento brasileiros.
 Analise o conteúdo fornecido e retorne APENAS um objeto json válido com os campos especificados.
@@ -61,7 +69,7 @@ async def extract_edital(
 
     raw = await complete_with_fallback(messages, config)
     messages = messages + [{"role": "assistant", "content": raw}]
-    data = json.loads(raw)
+    data = json.loads(_strip_markdown(raw))
     edital = Edital.model_validate(data)
     return edital, messages
 
@@ -75,7 +83,7 @@ async def correct_edital(
     correction_messages = messages + [{"role": "user", "content": correction_prompt}]
 
     raw = await complete_with_fallback(correction_messages, config)
-    data = json.loads(raw)
+    data = json.loads(_strip_markdown(raw))
     return Edital.model_validate(data)
 
 def build_correction_prompt(field_scores: dict[str, FieldScore]) -> str:

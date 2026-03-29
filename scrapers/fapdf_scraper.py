@@ -21,6 +21,9 @@ class FAPDFScraper(BaseScraper):
             href = a["href"]
             if "/documents/d/fap/" not in href:
                 continue
+            slug = href.rstrip("/").rsplit("/", 1)[-1]
+            if not slug.startswith("edital"):
+                continue
             titulo = a.get_text(strip=True)
             if not titulo:
                 prev = a.find_previous("strong")

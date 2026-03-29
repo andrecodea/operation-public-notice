@@ -106,3 +106,80 @@ Registro dos bugs encontrados durante o desenvolvimento. Útil para evitar repet
 **Decisão:** Usar Firecrawl API no `CAPESScraper` para listing e por-edital PDF discovery.
 **Motivo:** Firecrawl retorna markdown limpo + lista de links sem necessidade de seletores CSS. Mais robusto a mudanças de layout. Usuário já possui créditos.
 **Consequência:** `firecrawl-py` adicionado às dependências. `FIRECRAWL_API_KEY` necessária no `.env`. Playwright removido do CAPES.
+
+---
+
+## 10. FAPDF capturava 88 documentos institucionais (loop infinito no pipeline)
+
+**Descoberto em:** smoke test completo do `main.py` (2026-03-29).
+**Sintoma:** Pipeline não terminava — 88 documentos processados (Organograma, Plano de Dados Abertos, Contatos Telefônicos...), cada um disparando 2 chamadas LLM (extração + correção).
+**Causa:** Filtro `/documents/d/fap/` capturava todos os links da página, incluindo documentos institucionais do sidebar. O slug desses arquivos não contém `edital`.
+**Correção:** Adicionado filtro por slug: só aceita hrefs onde `slug.startswith("edital")`.
+
+```python
+slug = href.rstrip("/").rsplit("/", 1)[-1]
+if not slug.startswith("edital"):
+    continue
+```
+
+**Resultado:** 8 editais reais encontrados (antes: 88 documentos mistos).
+
+---
+
+## 11. LLM retornava markdown em vez de JSON puro → `json.loads` falhava silenciosamente
+
+**Descoberto em:** smoke test completo do `main.py` (2026-03-29).
+**Sintoma:** `Expecting value: line 1 column 1 (char 0)` em 100% das extrações, mesmo com `completion_tokens` > 0 nos logs de observabilidade.
+**Causa:** O LLM envolvia a resposta em bloco markdown (` ```json\n{...}\n``` `). O extrator chamava `json.loads(raw)` diretamente sem strip. `json.loads("```json...")` falha com o mesmo erro de string vazia.
+**Correção:** Adicionada `_strip_markdown()` em `extractors/llm_extractor.py`, chamada antes de ambos os `json.loads` (extração e correção):
+
+```python
+def _strip_markdown(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
+```
+
+**Padrão estabelecido:** Todo `json.loads` sobre resposta de LLM deve passar por `_strip_markdown()` antes.
+
+---
+
+## 12. FUNCAP — seletores errados (estrutura real é tabela, não ul/li/strong)
+
+**Descoberto em:** smoke test dos scrapers (2026-03-29).
+**Sintoma:** `FUNCAP: 0 oportunidades abertas encontradas.`
+**Causa:** O scraper buscava `["h2", "li"]` + `tag.find("strong")`, mas a página usa uma tabela dentro de `div.SistemasExternos`:
+- Título do edital: `td.laranja > span`
+- Links de PDF: `ul.ListaDecorada li a`
+
+**Correção:** Reescrito com seletores corretos. PDFs são resolvidos para URL absoluta com `urljoin` e armazenados em `opportunity["pdf_links"]`. `get_documents` apenas retorna esse campo — sem request adicional.
+
+**Padrão estabelecido:** Quando os documentos de uma oportunidade já são descobertos junto com ela (mesma página), armazená-los diretamente no dict da oportunidade evita um request extra desnecessário.
+
+---
+
+## 13. Firecrawl SDK v4 — API incompatível com uso anterior
+
+**Descoberto em:** smoke test dos scrapers com `load_dotenv` (2026-03-29).
+**Sintoma:** `'Firecrawl' object has no attribute 'scrape_url'`
+**Causa:** `firecrawl-py` v4.21.0 mudou completamente a API:
+
+| Antes (v1) | Depois (v4) |
+|------------|-------------|
+| `FirecrawlApp(api_key=...)` | `AsyncFirecrawlApp(api_key=...)` |
+| `.scrape_url(url, params={"formats": [...]})` | `await .scrape(url, formats=[...])` |
+| Síncrono | Assíncrono |
+
+**Correção:** `CAPESScraper` atualizado para `AsyncFirecrawlApp` e `await self.fc.scrape(url, formats=["links"])`. Testes atualizados para usar `AsyncMock` no método `scrape`.
+
+**Padrão estabelecido:** Ao usar SDKs externos, sempre verificar se há variante async (`AsyncXxx`) disponível e preferir ela em código `async/await`. Não assumir compatibilidade entre major versions.
+
+---
+
+## 14. `load_dotenv()` não chamado em scripts ad-hoc → FIRECRAWL_API_KEY não carregada
+
+**Sintoma:** `No API key provided for cloud service` ao rodar script Python inline com `-c`.
+**Causa:** `load_dotenv()` só é chamado em `main.py`. Scripts inline não carregam o `.env` automaticamente.
+**Padrão:** Em qualquer script ou teste que precise de variáveis de ambiente, adicionar `from dotenv import load_dotenv; load_dotenv()` antes de instanciar scrapers ou providers. No pipeline, `main.py` é responsável por isso.

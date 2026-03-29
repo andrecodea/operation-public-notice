@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from scrapers.capes_scraper import CAPESScraper
 from config.sources import SOURCES
 
@@ -9,39 +9,45 @@ def scraper():
     return CAPESScraper(SOURCES["capes"])
 
 
-def _mock_fc_result(links: list[str], markdown: str = "") -> MagicMock:
+def _mock_fc(links: list[str]) -> MagicMock:
     result = MagicMock()
     result.links = links
-    result.markdown = markdown
-    return result
+    fc = MagicMock()
+    fc.scrape = AsyncMock(return_value=result)
+    return fc
 
 
 async def test_get_opportunities_returns_internal_capes_links(scraper):
-    mock_result = _mock_fc_result(links=[
+    scraper._fc_client = _mock_fc(links=[
         "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/bolsas/edital-2026",
         "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/bolsas/edital-2025",
-        "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/resultado-2024",
         "https://external.site.com/irrelevante",
     ])
-    mock_fc = MagicMock()
-    mock_fc.scrape_url.return_value = mock_result
-    scraper._fc_client = mock_fc
 
     opportunities = await scraper.get_opportunities()
 
-    assert len(opportunities) >= 1
+    assert len(opportunities) == 2
     assert all("gov.br/capes" in opp["url"] for opp in opportunities)
 
 
+async def test_get_opportunities_skips_resultados(scraper):
+    scraper._fc_client = _mock_fc(links=[
+        "https://www.gov.br/capes/pt-br/assuntos/editais-e-resultados-capes/resultados-2026",
+        "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/bolsas/edital-2026",
+    ])
+
+    opportunities = await scraper.get_opportunities()
+
+    assert len(opportunities) == 1
+    assert "edital-2026" in opportunities[0]["url"]
+
+
 async def test_get_documents_finds_pdfs_on_edital_page(scraper):
-    mock_result = _mock_fc_result(links=[
+    scraper._fc_client = _mock_fc(links=[
         "https://www.gov.br/capes/pt-br/centrais-de-conteudo/documentos/edital-2026.pdf",
         "https://www.gov.br/capes/pt-br/centrais-de-conteudo/documentos/anexo-2026.pdf",
         "https://www.gov.br/capes/pt-br/pagina-interna",
     ])
-    mock_fc = MagicMock()
-    mock_fc.scrape_url.return_value = mock_result
-    scraper._fc_client = mock_fc
 
     opp = {"titulo": "Edital 2026", "url": "https://www.gov.br/capes/edital-2026"}
     docs = await scraper.get_documents(opp)
