@@ -2,10 +2,10 @@
 
 SOURCES: dict[str, dict] = {
     "fapdf": {
-        "url": "https://www.fap.df.gov.br/",
+        "url": "https://www.fap.df.gov.br/editais-fapdf-20261",
         "scraper": "FAPDFScraper",
-        "strategy": "playwright",
-        "filters": {"year": 2026}
+        "strategy": "httpx",
+        "filters": {"year": "2026"}
     },
     "funcap": {
         "url": "https://montenegro.funcap.ce.gov.br/sugba/editais-site-wordpress/",
@@ -16,7 +16,7 @@ SOURCES: dict[str, dict] = {
     "capes": {
         "url": "https://www.gov.br/capes/pt-br/assuntos/editais-e-resultados-capes",
         "scraper": "CAPESScraper",
-        "strategy": "playwright",
-        "filters": {"years": [2025, 2026]}
+        "strategy": "firecrawl",
+        "filters": {}
     }
 }
