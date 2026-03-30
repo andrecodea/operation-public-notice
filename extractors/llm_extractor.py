@@ -50,7 +50,7 @@ async def extract_edital(
     link_edital: str,
     fonte: str,
     config: LLMConfig
-) -> tuple[Edital, list[dict]]:
+) -> tuple[Edital, list[dict], str]:
     """"""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -67,24 +67,24 @@ async def extract_edital(
         }
     ]
 
-    raw = await complete_with_fallback(messages, config)
+    raw, model = await complete_with_fallback(messages, config)
     messages = messages + [{"role": "assistant", "content": raw}]
     data = json.loads(_strip_markdown(raw))
     edital = Edital.model_validate(data)
-    return edital, messages
+    return edital, messages, model
 
 async def correct_edital(
     messages: list[dict],
     field_scores: dict[str, FieldScore],
     config: LLMConfig,
-) -> Edital:
+) -> tuple[Edital, str]:
     """"""
     correction_prompt = build_correction_prompt(field_scores)
     correction_messages = messages + [{"role": "user", "content": correction_prompt}]
 
-    raw = await complete_with_fallback(correction_messages, config)
+    raw, model = await complete_with_fallback(correction_messages, config)
     data = json.loads(_strip_markdown(raw))
-    return Edital.model_validate(data)
+    return Edital.model_validate(data), model
 
 def build_correction_prompt(field_scores: dict[str, FieldScore]) -> str:
     """"""

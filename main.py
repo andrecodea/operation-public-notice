@@ -69,7 +69,7 @@ async def run_pipeline(config: LLMConfig | None = None, output_dir: Path | None 
 
                 pdf_text, text_truncated = await extract_text_from_url(pdf_url)
 
-                edital, messages = await extract_edital(
+                edital, messages, extraction_model = await extract_edital(
                     pdf_text=pdf_text,
                     link_edital=opportunity["url"],
                     fonte=source_name,
@@ -82,6 +82,7 @@ async def run_pipeline(config: LLMConfig | None = None, output_dir: Path | None 
                     config=config,
                     json_valid=True,
                     text_truncated=text_truncated,
+                    extraction_model=extraction_model,
                 )
 
                 if evaluation.overall_score < config.correction_threshold:
@@ -91,7 +92,7 @@ async def run_pipeline(config: LLMConfig | None = None, output_dir: Path | None 
                     )
                     score_before = evaluation.overall_score
 
-                    edital = await correct_edital(
+                    edital, correction_model = await correct_edital(
                         messages=messages,
                         field_scores=evaluation.field_scores,
                         config=config,
@@ -103,6 +104,7 @@ async def run_pipeline(config: LLMConfig | None = None, output_dir: Path | None 
                         config=config,
                         json_valid=True,
                         text_truncated=text_truncated,
+                        extraction_model=correction_model,
                     )
                     evaluation.corrected = True
                     evaluation.score_before_correction = score_before
@@ -115,6 +117,12 @@ async def run_pipeline(config: LLMConfig | None = None, output_dir: Path | None 
                 all_editais.append(edital.model_dump(mode="json"))
                 all_evaluations.append(evaluation.model_dump(mode="json"))
                 logger.info(f"[{source_name}] '{opportunity['titulo']}' concluído.")
+
+                # Flush parcial: frontend pode ler resultados enquanto o pipeline ainda roda
+                with open(out / "editais.json", "w", encoding="utf-8") as f:
+                    json.dump(all_editais, f, ensure_ascii=False, indent=2)
+                with open(out / "evaluation.json", "w", encoding="utf-8") as f:
+                    json.dump(all_evaluations, f, ensure_ascii=False, indent=2)
 
             except Exception as e:
                 logger.error(f"[{source_name}] Falha em '{opportunity['titulo']}': {e}")

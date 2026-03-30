@@ -33,3 +33,7 @@ class EvaluationResult(BaseModel):
     json_valid: bool             # did Pydantic validate without errors?
     text_truncated: bool         # was the PDF truncated at 15 pages?
     evaluated_at: datetime
+
+    # LLM tracking
+    extraction_model: str | None = None   # model used for extraction (primary or fallback)
+    judge_model: str | None = None        # model used for LLM judge

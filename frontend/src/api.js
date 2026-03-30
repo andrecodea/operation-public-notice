@@ -22,6 +22,12 @@ export async function fetchEvaluationSummary() {
   return res.json();
 }
 
+export async function fetchPipelineStatus() {
+  const res = await fetch(`${BASE}/pipeline/status`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function triggerPipeline() {
   const res = await fetch(`${BASE}/pipeline/run`, { method: "POST" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

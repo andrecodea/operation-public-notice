@@ -14,6 +14,11 @@ async def _run_and_reset() -> None:
         _pipeline_running = False
 
 
+@router.get("/pipeline/status")
+async def pipeline_status() -> dict:
+    return {"running": _pipeline_running}
+
+
 @router.post("/pipeline/run", status_code=202)
 async def trigger_pipeline(background_tasks: BackgroundTasks) -> dict:
     global _pipeline_running

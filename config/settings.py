@@ -10,4 +10,7 @@ class LLMConfig(BaseModel):
     max_retries: int = 2
     timeout_seconds: int = 60
     correction_threshold: float = 0.6
+    rpm_openai: int = 50   # requests per minute ceiling for OpenAI
+    rpm_claude: int = 40   # requests per minute ceiling for Claude
+    inter_call_delay: float = 3.0  # seconds to wait between LLM calls (reduces TPM bursts)
 

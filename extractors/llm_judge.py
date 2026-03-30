@@ -6,6 +6,7 @@ from config.settings import LLMConfig
 from models.edital import Edital
 from models.evaluation import EvaluationResult, FieldScore
 from providers.base import complete_with_fallback
+from extractors.llm_extractor import _strip_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ async def evaluate(
     config: LLMConfig,
     json_valid: bool = True,
     text_truncated: bool = False,
+    extraction_model: str | None = None,
 ) -> EvaluationResult:
     edital_dict = edital.model_dump(exclude={"id"})
     fields_to_eval = {k: v for k, v in edital_dict.items() if k in EVALUABLE_FIELDS}
@@ -56,8 +58,12 @@ async def evaluate(
         },
     ]
 
-    raw = await complete_with_fallback(messages, config)
-    scores_raw: dict = json.loads(raw)
+    raw, judge_model = await complete_with_fallback(messages, config)
+    try:
+        scores_raw: dict = json.loads(_strip_markdown(raw))
+    except json.JSONDecodeError:
+        logger.error("Judge retornou JSON inválido: %r", raw[:200])
+        raise
 
     field_scores: dict[str, FieldScore] = {}
     for field, data in scores_raw.items():
@@ -88,6 +94,8 @@ async def evaluate(
         json_valid=json_valid,
         text_truncated=text_truncated,
         evaluated_at=datetime.now(),
+        extraction_model=extraction_model,
+        judge_model=judge_model,
     )
 
 def _compute_overall_score(scores: dict[str, FieldScore]) -> float:

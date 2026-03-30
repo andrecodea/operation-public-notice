@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { fetchEditais, fetchEdital } from "./api";
 import FilterBar from "./components/FilterBar";
 import EditalList from "./components/EditalList";
@@ -13,6 +13,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [dashboardKey, setDashboardKey] = useState(0);
+  const refreshIntervalRef = useRef(null);
+
+  function startLiveRefresh() {
+    clearInterval(refreshIntervalRef.current);
+    refreshIntervalRef.current = setInterval(() => {
+      setFilters(f => ({ ...f }));
+    }, 10_000);
+  }
+
+  function stopLiveRefresh() {
+    clearInterval(refreshIntervalRef.current);
+    setFilters(f => ({ ...f }));
+    setDashboardKey(k => k + 1);
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -53,7 +68,10 @@ export default function App() {
             ))}
           </nav>
         </div>
-        <PipelineButton />
+        <PipelineButton
+          onStart={startLiveRefresh}
+          onDone={stopLiveRefresh}
+        />
       </header>
 
       {activeTab === "editais" ? (
@@ -76,7 +94,7 @@ export default function App() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <Dashboard />
+          <Dashboard key={dashboardKey} />
         </div>
       )}
     </div>

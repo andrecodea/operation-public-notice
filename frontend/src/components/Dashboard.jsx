@@ -77,6 +77,48 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="bg-white rounded-lg border p-4 mb-6">
+        <h3 className="text-sm font-semibold text-blue-700 mb-3">Métricas LLM</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Correção multi-turn</p>
+            <p className="text-xl font-bold text-gray-900">
+              {(summary.corrected_pct * 100).toFixed(0)}%
+            </p>
+            <p className="text-xs text-gray-400">editais com score &lt; 0.6</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Ganho médio pós-correção</p>
+            <p className="text-xl font-bold text-gray-900">
+              {summary.avg_correction_gain != null
+                ? (summary.avg_correction_gain >= 0 ? "+" : "") +
+                  (summary.avg_correction_gain * 100).toFixed(1) + "%"
+                : "—"}
+            </p>
+            <p className="text-xs text-gray-400">delta de score</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Uso de modelo</p>
+            {Object.keys(summary.model_usage).length === 0 ? (
+              <p className="text-sm text-gray-400">sem dados</p>
+            ) : (
+              <div className="space-y-1">
+                {Object.entries(summary.model_usage).map(([model, count]) => (
+                  <div key={model} className="flex items-center gap-2">
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${
+                      model.startsWith("gpt") ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"
+                    }`}>
+                      {model}
+                    </span>
+                    <span className="text-sm font-medium text-gray-700">{count}x</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-lg border p-4">
           <h3 className="text-sm font-semibold text-red-600 mb-2">

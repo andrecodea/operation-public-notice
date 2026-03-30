@@ -183,3 +183,101 @@ def _strip_markdown(text: str) -> str:
 **Sintoma:** `No API key provided for cloud service` ao rodar script Python inline com `-c`.
 **Causa:** `load_dotenv()` só é chamado em `main.py`. Scripts inline não carregam o `.env` automaticamente.
 **Padrão:** Em qualquer script ou teste que precise de variáveis de ambiente, adicionar `from dotenv import load_dotenv; load_dotenv()` antes de instanciar scrapers ou providers. No pipeline, `main.py` é responsável por isso.
+
+---
+
+## 15. LLM judge sem `_strip_markdown` → `Expecting value: line 1 column 1 (char 0)`
+
+**Descoberto em:** smoke test completo com pipeline rodando via API (2026-03-29).
+**Sintoma:** 3 de 4 editais processados falhavam com `Expecting value: line 1 column 1 (char 0)` no judge, mesmo com `completion_tokens > 0` nos logs. O extrator funcionava normalmente.
+**Causa:** `llm_extractor.py` tinha `_strip_markdown()` antes de cada `json.loads`, mas `llm_judge.py` chamava `json.loads(raw)` diretamente. Sob carga de 429 + retries, o modelo voltava a envolver o JSON em bloco markdown (` ```json\n{...}\n``` `). `json.loads("```json...")` falha com `char 0` porque a backtick não é um valor JSON válido.
+**Correção:** `_strip_markdown` importada de `llm_extractor` e aplicada no judge antes do `json.loads`. Adicionado `logger.error` com os primeiros 200 chars do raw em caso de falha para facilitar debugging futuro.
+
+```python
+# llm_judge.py
+from extractors.llm_extractor import _strip_markdown
+...
+scores_raw = json.loads(_strip_markdown(raw))
+```
+
+**Padrão reforçado:** Todo `json.loads` sobre resposta de LLM deve passar por `_strip_markdown()`. Sem exceções, mesmo com system prompt explícito pedindo JSON puro — o modelo ignora sob pressão de rate limiting.
+
+---
+
+## 16. Rate limiting por TPM, não por RPM — limiter proativo não resolve
+
+**Descoberto em:** execução real do pipeline (2026-03-29).
+**Sintoma:** 429s frequentes mesmo com pipeline sequencial (sem paralelismo). O `_RateLimiter` baseado em RPM adicionado anteriormente não reduzia os erros.
+**Causa:** Cada edital consome ~35k tokens em dois disparos (extração ~17k + judge ~17k). O limite de TPM do OpenAI Tier 1 para `gpt-4o` é 30k tokens/minuto. Dois disparos em sequência rápida excedem a janela.
+**Solução aplicada:** `inter_call_delay: float = 3.0` adicionado ao `LLMConfig` — sleep proativo antes de cada chamada LLM em `complete_with_fallback`. Reduz bursts mas não elimina 429 completamente com Tier 1.
+**Solução definitiva:** Fazer upgrade para Tier 2 da OpenAI ($50 gastos) → 450k TPM → sem 429 para este volume. Ou usar Claude como primário (limites de Anthropic são mais generosos no Tier equivalente).
+**Padrão:** Para pipelines sequenciais com PDFs grandes, o gargalo é TPM, não RPM. Rate limiters baseados em contagem de requests não ajudam — o correto é rastrear tokens consumidos por janela.
+
+---
+
+## 17. Pipeline não expunha resultados parciais ao frontend
+
+**Descoberto em:** uso real do frontend durante execução do pipeline (2026-03-29).
+**Sintoma:** Frontend mostrava lista vazia durante toda a execução. Editais apareciam só após o pipeline encerrar completamente.
+**Causa:** `main.py` acumulava todos os resultados em memória e escrevia os JSONs apenas no final do loop de todas as fontes.
+**Correção:** Flush parcial após cada edital concluído — `output/editais.json` e `output/evaluation.json` são sobrescritos com os dados acumulados até aquele momento. A API lê os arquivos a cada request, então o frontend passa a ver resultados incrementais.
+
+```python
+# Após cada edital concluído em main.py
+with open(out / "editais.json", "w", encoding="utf-8") as f:
+    json.dump(all_editais, f, ensure_ascii=False, indent=2)
+with open(out / "evaluation.json", "w", encoding="utf-8") as f:
+    json.dump(all_evaluations, f, ensure_ascii=False, indent=2)
+```
+
+**Trade-off:** A cada edital há uma escrita de arquivo completa (não append). Aceitável para o volume atual (< 50 editais). Para volumes maiores, substituir por banco ou por append com reescrita eventual.
+
+---
+
+## 18. Decisões de design adicionadas nesta sessão (2026-03-29)
+
+### 18a. Tracking de modelo LLM na avaliação
+
+**Motivação:** Saber se uma extração usou o modelo primário (gpt-4o) ou o fallback (Claude) é útil para diagnosticar diferenças de qualidade e rastrear custos por fonte.
+
+**Implementação:**
+- `complete_with_fallback` passou a retornar `tuple[str, str]` — texto e nome do modelo usado
+- `EvaluationResult` ganhou `extraction_model: str | None` e `judge_model: str | None`
+- `llm_extractor.extract_edital` e `correct_edital` retornam o modelo junto com o edital
+- `llm_judge.evaluate` recebe `extraction_model` como parâmetro e registra `judge_model` internamente
+- `/evaluation/summary` expõe `model_usage: dict[str, int]` — contagem por modelo
+
+**Padrão:** Qualquer chamada LLM deve ser rastreável — qual modelo, qual etapa, qual edital.
+
+### 18b. Pipeline status endpoint + polling no frontend
+
+**Motivação:** `POST /pipeline/run` retorna 202 imediatamente (BackgroundTasks). Sem polling, o frontend não sabe quando o pipeline termina.
+
+**Implementação:**
+- `GET /pipeline/status` → `{"running": bool}` — usa a variável `_pipeline_running` já existente no módulo
+- `PipelineButton` faz polling a cada 3s enquanto `running: true`
+- Ao detectar `running: false`, dispara `onDone()` → App recarrega lista e dashboard
+- `onStart()` inicia polling de editais a cada 10s para exibir resultados incrementais
+
+**Padrão:** Para operações longas em background, sempre expor endpoint de status separado. Não bloquear o request original nem usar WebSocket para POC — polling simples é suficiente.
+
+### 18c. `_RateLimiter` baseado em token bucket
+
+**Motivação:** Evitar 429s proativamente em vez de só tratar reativamente via retry.
+
+**Implementação:** Classe `_RateLimiter` em `providers/base.py` com janela deslizante de `period` segundos e teto de `max_calls`. Instâncias separadas por provider, inicializadas lazily a partir de `LLMConfig.rpm_openai` e `LLMConfig.rpm_claude`.
+
+**Limitação conhecida:** Limita por RPM, não por TPM. Para o problema atual (TPM), o `inter_call_delay` é mais efetivo. O limiter de RPM protege cenários futuros com concorrência.
+
+### 18d. Empacotamento como `.exe` via PyInstaller
+
+**Motivação:** Entregar a solução como executável standalone sem exigir Python instalado.
+
+**Implementação:**
+- `run_app.py` — entry point: carrega `.env`, abre browser automaticamente, inicia uvicorn
+- `app.spec` — spec PyInstaller com `hiddenimports` para FastAPI/uvicorn/pydantic e `datas` incluindo `frontend/dist/`
+- `api/main.py` — serve `frontend/dist/` como static files quando o diretório existe (modo produção)
+- Build: `cd frontend && npm run build && cd .. && pyinstaller app.spec`
+- Saída: `dist/operacao-edital/operacao-edital.exe`
+
+**Limitação:** Playwright não funciona dentro do bundle PyInstaller — browsers precisam ser instalados separadamente via `playwright install chromium` na máquina destino. Distribuição é a pasta `dist/operacao-edital/`, não um único `.exe`.

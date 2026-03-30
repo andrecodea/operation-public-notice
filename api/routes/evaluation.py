@@ -47,6 +47,20 @@ def get_evaluation_summary(
         f for f, vals in field_completude.items() if sum(vals) / len(vals) < 0.7
     ]
 
+    corrected = [ev for ev in evaluations if ev.get("corrected")]
+    correction_gains = [
+        ev["score_after_correction"] - ev["score_before_correction"]
+        for ev in corrected
+        if ev.get("score_after_correction") is not None
+        and ev.get("score_before_correction") is not None
+    ]
+    avg_correction_gain = round(sum(correction_gains) / len(correction_gains), 3) if correction_gains else None
+
+    model_usage: dict[str, int] = defaultdict(int)
+    for ev in evaluations:
+        if ev.get("extraction_model"):
+            model_usage[ev["extraction_model"]] += 1
+
     return {
         "total_editais": len(editais),
         "avg_score": round(avg_score, 3),
@@ -57,4 +71,6 @@ def get_evaluation_summary(
         "text_truncated_pct": round(sum(ev["text_truncated"] for ev in evaluations) / n, 3),
         "avg_filled_fields": round(sum(ev["filled_fields"] for ev in evaluations) / n, 1),
         "corrected_pct": round(sum(ev["corrected"] for ev in evaluations) / n, 3),
+        "avg_correction_gain": avg_correction_gain,
+        "model_usage": dict(model_usage),
     }

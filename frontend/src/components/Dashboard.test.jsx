@@ -13,6 +13,8 @@ const MOCK_SUMMARY = {
   text_truncated_pct: 0.2,
   avg_filled_fields: 9.5,
   corrected_pct: 0.3,
+  avg_correction_gain: 0.12,
+  model_usage: { "gpt-4o": 8, "claude-sonnet-4-5": 2 },
 };
 
 afterEach(() => vi.restoreAllMocks());
